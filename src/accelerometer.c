@@ -12,14 +12,12 @@
 
 uint8_t readstream[4];
 uint8_t accInitDone = 0;
+uint8_t magInitDone = 0;
 
 void initAcc()
 {
 	LSM303DLHCAcc_InitTypeDef AccInitStruct;
 	LSM303DLHCAcc_FilterConfigTypeDef AccInitFilterStruct;
-
-	const uint8_t dev_addr = ACC_I2C_ADDRESS;
-	const uint8_t reg_addr = LSM303DLHC_STATUS_REG_A;
 
 	// Initialize LSM303
 	AccInitStruct.Power_Mode = LSM303DLHC_NORMAL_MODE;
@@ -42,7 +40,7 @@ void initAcc()
 	delay(0x100);
 
 	// Try to read status register
-	if (LSM303DLHC_Read(dev_addr|0x01, reg_addr, 1, readstream) == ERROR)
+	if (LSM303DLHC_AccGetDataStatus() == ERROR)
 	{
 		STM_EVAL_LEDToggle(LED3);
 		STM_EVAL_LEDToggle(LED4);
@@ -55,9 +53,40 @@ void initAcc()
 	accInitDone = 1;
 }
 
+void initMagnet(void)
+{
+	LSM303DLHCMag_InitTypeDef MagnetInitStruct;
+	MagnetInitStruct.Temperature_Sensor = LSM303DLHC_TEMPSENSOR_DISABLE;
+	MagnetInitStruct.MagOutput_DataRate = LSM303DLHC_ODR_1_5_HZ;
+	MagnetInitStruct.Working_Mode = LSM303DLHC_CONTINUOS_CONVERSION;
+	MagnetInitStruct.MagFull_Scale = LSM303DLHC_FS_1_3_GA;
+	LSM303DLHC_MagInit(&MagnetInitStruct);
+
+	delay(0x100);
+	magInitDone = 1;
+}
+
+uint16_t getMagValue(enum axis direction)
+{
+	const uint8_t dev_addr = MAG_I2C_ADDRESS; // | 0x01;
+	uint8_t reg_addr_H;
+	uint8_t ret[2];
+
+	if (!magInitDone) return 0;
+
+	if (direction == X)		 {	reg_addr_H = LSM303DLHC_OUT_X_H_M; }
+	else if (direction == Y) {	reg_addr_H = LSM303DLHC_OUT_Y_H_M; }
+	else if (direction == Z) {	reg_addr_H = LSM303DLHC_OUT_Z_H_M; }
+	else return 0;
+
+	LSM303DLHC_Read(dev_addr, reg_addr_H, 2, ret);
+
+	return (uint16_t)ret[0] << 8 | ret[1];
+}
+
 uint16_t getAccValue(enum axis direction)
 {
-	const uint8_t dev_addr = ACC_I2C_ADDRESS;
+	const uint8_t dev_addr = ACC_I2C_ADDRESS | 0x01;
 	uint8_t reg_addr_H, reg_addr_L;
 	uint8_t ret_msb = 0, ret_lsb = 0;
 
@@ -68,8 +97,16 @@ uint16_t getAccValue(enum axis direction)
 	else if (direction == Z) {	reg_addr_L = LSM303DLHC_OUT_Z_L_A; reg_addr_H = LSM303DLHC_OUT_Z_H_A; }
 	else return 0;
 
-	LSM303DLHC_Read(dev_addr|0x01, reg_addr_L, 1, &ret_msb);	// Read low-value
-	LSM303DLHC_Read(dev_addr|0x01, reg_addr_H, 1, &ret_lsb);	// Read high-value
+	LSM303DLHC_Read(dev_addr, reg_addr_L, 1, &ret_msb);	// Read low-value
+	LSM303DLHC_Read(dev_addr, reg_addr_H, 1, &ret_lsb);	// Read high-value
 
 	return ret_msb << 8 | ret_lsb;
+}
+
+
+uint8_t getMRregister(void)
+{
+	uint8_t ret;
+	LSM303DLHC_Read(ACC_I2C_ADDRESS | 0x01, LSM303DLHC_CRA_REG_M, 1, &ret);
+	return ret;
 }

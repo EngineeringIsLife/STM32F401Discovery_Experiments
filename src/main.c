@@ -27,39 +27,32 @@
 #include "stm32f401_discovery.h"
 #include "main.h"
 #include "accelerometer.h"
-
-enum direction { RIGHT, LEFT, UP, DOWN, HORIZ_MID, VERTIC_MID };
+#include "test.h"
 
 void initTimerInterrupt(void);
-void setDirectionLED(enum direction dir);
+void initLEDsAndButton(void);
 
+enum mode {ACC, MAG};
+enum mode acc_mode = ACC;
 
+// User button to switch LED output between compass and gravity sensing
 void EXTI0_IRQHandler(void) {
 	if (EXTI_GetITStatus(EXTI_Line0) != RESET) {
-		//STM_EVAL_LEDToggle(LED3);
+		if (acc_mode == ACC) acc_mode = MAG;
+		else acc_mode = ACC;
 		EXTI_ClearITPendingBit(EXTI_Line0);
 	}
 }
 
-uint16_t accvalue = 0;
 void TIM3_IRQHandler(void) {
 	if (TIM_GetITStatus(TIM3, TIM_IT_Update) != RESET)
 	{
-		//STM_EVAL_LEDToggle(LED5);
 		TIM_ClearITPendingBit(TIM3, TIM_IT_Update);
 
-		accvalue = getAccValue(X);
-		if ((accvalue & 0x7fff) < 0x019a) setDirectionLED(VERTIC_MID);
-		else if (accvalue & 0x8000)	setDirectionLED(UP);
-		else						setDirectionLED(DOWN);
-
-		accvalue = getAccValue(Y);
-		if ((accvalue & 0x7fff) < 0x019a) setDirectionLED(HORIZ_MID);
-		else if (accvalue & 0x8000) setDirectionLED(LEFT);
-		else						setDirectionLED(RIGHT);
+		if (acc_mode == ACC) setAccLED();
+		else setMagnetLED();
 	}
 }
-
 
 int main(void)
 {
@@ -76,6 +69,7 @@ int main(void)
 	initLEDsAndButton();
 	initTimerInterrupt();
 	initAcc();		// Init accelerometer
+	initMagnet();
 
 	while (1)
 	{
@@ -130,7 +124,7 @@ void initTimerInterrupt(void)
 	SystemCoreClockUpdate();
 	timerInitStruct.TIM_Prescaler = (uint16_t) (SystemCoreClock / 10000);
 	timerInitStruct.TIM_CounterMode = TIM_CounterMode_Up;
-	timerInitStruct.TIM_Period = 10 * 10;		// [1/10 ms] Reload-Value
+	timerInitStruct.TIM_Period = 10 * 100;		// [1/10 ms] Reload-Value
 	timerInitStruct.TIM_ClockDivision = TIM_CKD_DIV1;
 	timerInitStruct.TIM_RepetitionCounter = 0;
 	TIM_TimeBaseInit(TIM3, &timerInitStruct);
@@ -145,36 +139,4 @@ void initTimerInterrupt(void)
 	NVIC_InitStructure_loc.NVIC_IRQChannelSubPriority = 1;
 	NVIC_InitStructure_loc.NVIC_IRQChannelCmd = ENABLE;
 	NVIC_Init(&NVIC_InitStructure_loc);
-}
-
-
-void setDirectionLED(enum direction dir)
-{
-	switch(dir)
-	{
-	case UP:
-		STM_EVAL_LEDOn(LED3);
-		STM_EVAL_LEDOff(LED6);
-		break;
-	case DOWN:
-		STM_EVAL_LEDOn(LED6);
-		STM_EVAL_LEDOff(LED3);
-		break;
-	case RIGHT:
-		STM_EVAL_LEDOn(LED5);
-		STM_EVAL_LEDOff(LED4);
-		break;
-	case LEFT:
-		STM_EVAL_LEDOn(LED4);
-		STM_EVAL_LEDOff(LED5);
-		break;
-	case HORIZ_MID:
-		STM_EVAL_LEDOff(LED4);
-		STM_EVAL_LEDOff(LED5);
-		break;
-	case VERTIC_MID:
-		STM_EVAL_LEDOff(LED3);
-		STM_EVAL_LEDOff(LED6);
-		break;
-	}
 }
